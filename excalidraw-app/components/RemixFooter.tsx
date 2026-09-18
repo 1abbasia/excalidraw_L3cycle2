@@ -1,8 +1,13 @@
 import React from "react";
 
-// Renders as a bar layered over the bottom of the app, outside the drawing
-// canvas itself — distinct from `AppFooter`, which renders inside
-// Excalidraw's own `Footer` canvas-UI slot.
+// Renders as a bar fixed over the bottom of the viewport — layered above the
+// drawing canvas as chrome, not as part of the drawn scene — distinct from
+// `AppFooter`, which renders inside Excalidraw's own `Footer` canvas-UI slot.
+// Rendered as a child of `<Excalidraw>` (like `ShareDialog`/`AppSidebar`) so
+// it sits inside the `.excalidraw` DOM subtree and inherits the app's theme
+// CSS variables, e.g. `--ui-font`, the same UI font every other Excalidraw
+// control uses (buttons don't inherit font-family from ancestors by
+// default, so it's set explicitly below rather than relying on cascade).
 export const RemixFooter = React.memo(
   ({ onRemix }: { onRemix: () => void }) => {
     return (
@@ -19,7 +24,8 @@ export const RemixFooter = React.memo(
           gap: "1rem",
           padding: ".625rem 1rem",
           background: "var(--island-bg-color, #232329)",
-          color: "var(--color-primary-on-fill, #fff)",
+          color: "var(--text-primary-color, #fff)",
+          fontFamily: "var(--ui-font)",
           fontSize: ".875rem",
         }}
       >
@@ -31,11 +37,12 @@ export const RemixFooter = React.memo(
             border: "none",
             borderRadius: "0.375rem",
             padding: ".375rem .875rem",
+            fontFamily: "var(--ui-font)",
             fontSize: ".875rem",
             fontWeight: 600,
             cursor: "pointer",
             background: "var(--color-primary, #6965db)",
-            color: "#fff",
+            color: "var(--color-surface-lowest, #fff)",
           }}
         >
           Remix

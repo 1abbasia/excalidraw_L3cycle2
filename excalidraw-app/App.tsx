@@ -1156,6 +1156,8 @@ const ExcalidrawWrapper = () => {
 
         <AppSidebar />
 
+        {remixInfo.isRemixable && <RemixFooter onRemix={handleRemix} />}
+
         {errorMessage && (
           <ErrorDialog onClose={() => setErrorMessage("")}>
             {errorMessage}
@@ -1351,7 +1353,6 @@ const ExcalidrawWrapper = () => {
           />
         )}
       </Excalidraw>
-      {remixInfo.isRemixable && <RemixFooter onRemix={handleRemix} />}
     </div>
   );
 };
