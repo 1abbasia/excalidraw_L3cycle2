@@ -1,3 +1,5 @@
+import { newElementWith } from "@excalidraw/element";
+
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 import type { AppState } from "@excalidraw/excalidraw/types";
 
@@ -19,7 +21,11 @@ export type RemixableSceneInfo = {
  * static share path — never during live collaboration.
  */
 export const getRemixableSceneInfo = (
-  initResult: { isExternalScene: boolean; id?: string | null; key?: string | null },
+  initResult: {
+    isExternalScene: boolean;
+    id?: string | null;
+    key?: string | null;
+  },
   isCollabScene: boolean,
 ): RemixableSceneInfo => {
   const sourceId = initResult.id ?? null;
@@ -44,21 +50,26 @@ export type RemixResult = {
 };
 
 /**
- * Intended behavior (not implemented yet — next work session):
- * - Strip the source share's id/key so the result is not tied to the
- *   original backend record.
- * - Regenerate element versions (and version nonces) so the copy is treated
- *   as brand-new, independent history rather than a continuation of the
- *   source scene.
- * - Return a scene ready to be saved as a fresh local drawing (i.e. safe to
- *   pass straight into local storage / a new local scene), without ever
- *   mutating or affecting the original shared drawing.
+ * Turns a loaded shared scene into an independent local copy.
+ *
+ * Source id/key are never part of the element/appState data (they're tracked
+ * separately by the caller via `RemixableSceneInfo`), so there's nothing to
+ * strip here — the returned scene is detached simply by never referencing
+ * them again once passed to local storage.
+ *
+ * Every element is rebuilt via `newElementWith(el, {}, true)`, which bumps
+ * `version`/`versionNonce`/`updated` on a fresh object without touching the
+ * source elements — the same mechanism the rest of the app uses to signal
+ * "new edit, not a continuation" for collab/history reconciliation.
  */
 export const remixScene = (
   elements: readonly ExcalidrawElement[],
   appState: Partial<AppState>,
 ): RemixResult => {
-  throw new Error("not implemented — see JSDoc");
+  return {
+    elements: elements.map((element) => newElementWith(element, {}, true)),
+    appState: { ...appState },
+  };
 };
 
 export type RemixTrackingEvent =
@@ -71,5 +82,5 @@ export const trackRemixEvent = (
   event: RemixTrackingEvent,
   meta?: Record<string, unknown>,
 ): void => {
-  console.log("[remix]", event, meta ?? {});
+  console.info("[remix]", event, meta ?? {});
 };
