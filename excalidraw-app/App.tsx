@@ -106,6 +106,7 @@ import {
   ExportToExcalidrawPlus,
   exportToExcalidrawPlus,
 } from "./components/ExportToExcalidrawPlus";
+import { RemixFooter } from "./components/RemixFooter";
 import { TopErrorBoundary } from "./components/TopErrorBoundary";
 
 import {
@@ -130,6 +131,7 @@ import {
   localStorageQuotaExceededAtom,
 } from "./data/LocalData";
 import { isBrowserStorageStateNewer } from "./data/tabSync";
+
 import { ShareDialog, shareDialogStateAtom } from "./share/ShareDialog";
 import CollabError, { collabErrorIndicatorAtom } from "./collab/CollabError";
 import { useHandleAppTheme } from "./useHandleAppTheme";
@@ -148,8 +150,14 @@ import "./index.scss";
 
 import { ExcalidrawPlusPromoBanner } from "./components/ExcalidrawPlusPromoBanner";
 import { AppSidebar } from "./components/AppSidebar";
+import {
+  getRemixableSceneInfo,
+  remixScene,
+  trackRemixEvent,
+} from "./data/remix";
 
 import type { CollabAPI } from "./collab/Collab";
+import type { RemixableSceneInfo } from "./data/remix";
 
 polyfill();
 
@@ -378,6 +386,34 @@ const ExcalidrawWrapper = () => {
   const [errorMessage, setErrorMessage] = useState("");
   const isCollabDisabled = isRunningInIframe();
 
+  const [remixInfo, setRemixInfo] = useState<RemixableSceneInfo>({
+    isRemixable: false,
+    sourceId: null,
+    sourceKey: null,
+  });
+
+  const handleRemix = useCallback(() => {
+    if (!excalidrawAPI || !remixInfo.isRemixable) {
+      return;
+    }
+
+    trackRemixEvent("remix_clicked", { sourceId: remixInfo.sourceId });
+
+    const { elements, appState } = remixScene(
+      excalidrawAPI.getSceneElements(),
+      excalidrawAPI.getAppState(),
+    );
+
+    excalidrawAPI.updateScene({
+      elements,
+      appState: restoreAppState(appState, excalidrawAPI.getAppState()),
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    });
+
+    trackRemixEvent("remix_completed", { sourceId: remixInfo.sourceId });
+    setRemixInfo({ isRemixable: false, sourceId: null, sourceKey: null });
+  }, [excalidrawAPI, remixInfo]);
+
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
 
   const [langCode, setLangCode] = useAppLangCode();
@@ -565,6 +601,15 @@ const ExcalidrawWrapper = () => {
     initializeScene({ collabAPI, excalidrawAPI }).then(async (data) => {
       loadImages(data, /* isInitialLoad */ true);
       initialStatePromiseRef.current.promise.resolve(data.scene);
+
+      const info = getRemixableSceneInfo(
+        data,
+        collabAPI?.isCollaborating() ?? false,
+      );
+      setRemixInfo(info);
+      if (info.isRemixable) {
+        trackRemixEvent("footer_viewed", { sourceId: info.sourceId });
+      }
     });
 
     const onHashChange = async (event: HashChangeEvent) => {
@@ -589,6 +634,15 @@ const ExcalidrawWrapper = () => {
               appState: restoreAppState(data.scene.appState, null),
               captureUpdate: CaptureUpdateAction.IMMEDIATELY,
             });
+          }
+
+          const info = getRemixableSceneInfo(
+            data,
+            collabAPI?.isCollaborating() ?? false,
+          );
+          setRemixInfo(info);
+          if (info.isRemixable) {
+            trackRemixEvent("footer_viewed", { sourceId: info.sourceId });
           }
         });
       }
@@ -1101,6 +1155,8 @@ const ExcalidrawWrapper = () => {
         />
 
         <AppSidebar />
+
+        {remixInfo.isRemixable && <RemixFooter onRemix={handleRemix} />}
 
         {errorMessage && (
           <ErrorDialog onClose={() => setErrorMessage("")}>
