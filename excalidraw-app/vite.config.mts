@@ -17,6 +17,14 @@ export default defineConfig(({ mode }) => {
       port: Number(envVars.VITE_APP_PORT || 3000),
       // open the browser
       open: true,
+      // Local workaround for json-dev.excalidraw.com being down; see .env.development.local
+      proxy: {
+        "/api/v2": {
+          target: "https://json.excalidraw.com",
+          changeOrigin: true,
+          secure: true,
+        },
+      },
     },
     // We need to specify the envDir since now there are no
     //more located in parallel with the vite.config.ts file but in parent dir
