@@ -29,7 +29,7 @@ export const RemixFooter = React.memo(
           fontSize: ".875rem",
         }}
       >
-        <span>You're viewing a shared Excalidraw drawing.</span>
+        <span>Made with Excalidraw</span>
         <button
           type="button"
           onClick={onRemix}
