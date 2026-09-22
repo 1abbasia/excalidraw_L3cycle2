@@ -1,4 +1,5 @@
 import { newElementWith } from "@excalidraw/element";
+import { trackEvent } from "@excalidraw/excalidraw/analytics";
 
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 import type { AppState } from "@excalidraw/excalidraw/types";
@@ -83,4 +84,5 @@ export const trackRemixEvent = (
   meta?: Record<string, unknown>,
 ): void => {
   console.info("[remix]", event, meta ?? {});
+  trackEvent("remix", event, JSON.stringify(meta ?? {}));
 };

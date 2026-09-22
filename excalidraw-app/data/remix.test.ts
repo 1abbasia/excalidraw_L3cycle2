@@ -1,8 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 
+import { trackEvent } from "@excalidraw/excalidraw/analytics";
+
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 
 import { getRemixableSceneInfo, remixScene, trackRemixEvent } from "./remix";
+
+vi.mock("@excalidraw/excalidraw/analytics", () => ({
+  trackEvent: vi.fn(),
+}));
 
 // Minimal element containing only the fields remixScene needs.
 const makeElement = (
@@ -119,5 +125,23 @@ describe("trackRemixEvent", () => {
       sourceId: "abc",
     });
     spy.mockRestore();
+  });
+
+  it("forwards the event to analytics under the remix category", () => {
+    trackRemixEvent("reshared", { sourceId: "abc" });
+    expect(trackEvent).toHaveBeenCalledWith(
+      "remix",
+      "reshared",
+      JSON.stringify({ sourceId: "abc" }),
+    );
+  });
+
+  it("forwards an empty object when no meta is given", () => {
+    trackRemixEvent("footer_viewed");
+    expect(trackEvent).toHaveBeenCalledWith(
+      "remix",
+      "footer_viewed",
+      JSON.stringify({}),
+    );
   });
 });
