@@ -391,6 +391,9 @@ const ExcalidrawWrapper = () => {
     sourceId: null,
     sourceKey: null,
   });
+  // Survives remixInfo resetting to isRemixable: false right after a remix,
+  // so a later re-share of this scene can still report where it came from.
+  const remixedFromSourceIdRef = useRef<string | null>(null);
 
   const handleRemix = useCallback(() => {
     if (!excalidrawAPI || !remixInfo.isRemixable) {
@@ -411,6 +414,7 @@ const ExcalidrawWrapper = () => {
     });
 
     trackRemixEvent("remix_completed", { sourceId: remixInfo.sourceId });
+    remixedFromSourceIdRef.current = remixInfo.sourceId;
     setRemixInfo({ isRemixable: false, sourceId: null, sourceKey: null });
   }, [excalidrawAPI, remixInfo]);
 
@@ -848,6 +852,11 @@ const ExcalidrawWrapper = () => {
 
       if (url) {
         setLatestShareableLink(url);
+        if (remixedFromSourceIdRef.current) {
+          trackRemixEvent("reshared", {
+            sourceId: remixedFromSourceIdRef.current,
+          });
+        }
       }
     } catch (error: any) {
       if (error.name !== "AbortError") {
