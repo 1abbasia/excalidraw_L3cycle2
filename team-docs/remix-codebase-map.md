@@ -15,9 +15,13 @@ This codebase has **two unrelated systems** that both involve a link with an id/
 
 | File | Role in this feature |
 | --- | --- |
-| `excalidraw-app/App.tsx` | Contains `initializeScene`, which detects the `#json=id,key` hash and loads the shared scene as the local scene on page load. This is where the Remix footer/button UI will eventually be wired in. |
-| `excalidraw-app/data/index.ts` | Contains `importFromBackend` (fetches + decrypts a shared scene by id/key) and `exportToBackend` (encrypts + POSTs a scene, producing a new id/key). Remix will reuse `exportToBackend` when a remixed scene is re-shared. |
-| `excalidraw-app/data/remix.ts` | **New file.** The locked Remix interface contract — see below. |
+| `excalidraw-app/App.tsx` | Contains `initializeScene`, which detects the `#json=id,key` hash and loads the shared scene as the local scene on page load. The Remix footer/button UI is wired in here: `remixInfo` state, `handleRemix`, and the `reshared` tracking call in `onExportToBackend`. |
+| `excalidraw-app/data/index.ts` | Contains `importFromBackend` (fetches + decrypts a shared scene by id/key) and `exportToBackend` (encrypts + POSTs a scene, producing a new id/key). Remix reuses `exportToBackend` when a remixed scene is re-shared. |
+| `excalidraw-app/data/remix.ts` | The locked Remix interface contract — see below. Fully implemented, including `trackRemixEvent` forwarding to analytics. |
+| `excalidraw-app/data/remix.test.ts` | Unit tests for `getRemixableSceneInfo`, `remixScene`, and `trackRemixEvent`'s analytics forwarding. |
+| `excalidraw-app/components/RemixFooter.tsx` | The footer UI component: "Made with Excalidraw" + Remix button. |
+| `excalidraw-app/vite.config.mts` | Local-dev-only Vite proxy (`/api/v2` → `https://json.excalidraw.com`), added as a workaround while `json-dev.excalidraw.com` is down. Paired with a gitignored `.env.development.local`. Not part of the feature logic itself. |
+| `packages/excalidraw/analytics.ts` | **Outside `excalidraw-app/`** — shared analytics used by the whole editor, not scoped to this feature. `trackRemixEvent` forwards here (`trackEvent("remix", ...)`) into the existing Simple Analytics (`sa_event`) pipeline, gated by `ALLOWED_CATEGORIES_TO_TRACK` (now includes `"remix"`) and `VITE_APP_ENABLE_TRACKING`. Only the allowlist entry was added; the pipeline itself pre-dates Remix. |
 | `excalidraw-app/collab/Collab.tsx` | Implements live collaboration: session state, `isCollaborating()`, joining/leaving rooms, reconciling remote edits. Unrelated to Remix; exposes the `isCollaborating()` check Remix needs to avoid misfiring during a collab session. |
 | `excalidraw-app/collab/Portal.tsx` | The live-collaboration transport layer: owns the `socket.io` connection, room id/key, and broadcasts scene updates to other clients in real time. Unrelated to Remix. |
 | `excalidraw-app/data/firebase.ts` | Encrypted **file blob** storage (e.g. embedded images), used by _both_ the static-share flow (`exportToBackend`) and the collab flow. Not a "realtime sync" file — see Corrections. |
@@ -27,7 +31,8 @@ This codebase has **two unrelated systems** that both involve a link with an id/
 - `excalidraw-app/App.tsx` — to wire in the Remix footer/button and call `getRemixableSceneInfo` / `remixScene` from `remix.ts`.
 - `excalidraw-app/data/remix.ts` — the feature's own logic file (implementing `remixScene`, adding new footer/UI-support code), subject to the interface-lock note below.
 - `excalidraw-app/data/index.ts` — only if Remix needs to _call_ `exportToBackend` / `importFromBackend`; their existing signatures should not need to change.
-- New files for the footer UI component itself (doesn't exist yet).
+- `excalidraw-app/components/RemixFooter.tsx` — the footer UI component.
+- `packages/excalidraw/analytics.ts` — **with care.** This is shared infrastructure used across the whole editor, not scoped to Remix — unlike everything else on this list. Adding a category to `ALLOWED_CATEGORIES_TO_TRACK` is safe and already done (`"remix"`); don't change `trackEvent`'s existing behavior for other categories (`command_palette`, `export`, `ai`) as part of Remix work.
 
 ## Do not touch
 
@@ -43,6 +48,8 @@ This file's exported function and type signatures (`RemixableSceneInfo`, `getRem
 One detail specifically worth not rediscovering the hard way: `initializeScene`'s return shape **cannot by itself** tell you whether a scene came from the static share path or from live collaboration — both produce the identical shape `{ isExternalScene: true; id: string; key: string }`. That's why `getRemixableSceneInfo` takes a second, caller-supplied `isCollabScene` argument — it is the only thing that disambiguates the two. Whoever wires `remix.ts` into `App.tsx` must compute that flag correctly (e.g. from `collabAPI?.isCollaborating()`) and pass it in; getting it wrong would make the Remix button appear during a live collaboration session, which must never happen.
 
 `remixScene` is implemented: it rebuilds every element via `newElementWith(el, {}, true)` to regenerate `version`/`versionNonce`/`updated` without mutating the source elements. Source id/key are never part of the element/appState data, so there's nothing to strip — the scene is detached simply by never referencing them again once passed to local storage.
+
+All four `RemixTrackingEvent` values are wired and fire in practice: `footer_viewed` and `remix_clicked`/`remix_completed` from `App.tsx`, and `reshared` when a remixed scene (tracked via a `remixedFromSourceIdRef` that survives `remixInfo` resetting) gets shared again through `onExportToBackend`. `trackRemixEvent` forwards every call to `trackEvent("remix", event, JSON.stringify(meta))` in `packages/excalidraw/analytics.ts`, in addition to its original `console.info` logging — so events reach Simple Analytics in production, gated by that file's own `VITE_APP_ENABLE_TRACKING` and `isDevEnv()` checks (silently no-op in local dev by existing design, not a bug).
 
 ## Corrections
 
