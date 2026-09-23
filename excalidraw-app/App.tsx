@@ -106,7 +106,7 @@ import {
   ExportToExcalidrawPlus,
   exportToExcalidrawPlus,
 } from "./components/ExportToExcalidrawPlus";
-import { RemixFooter } from "./components/RemixFooter";
+import { RemixFooter, REMIX_FOOTER_HEIGHT } from "./components/RemixFooter";
 import { TopErrorBoundary } from "./components/TopErrorBoundary";
 
 import {
@@ -395,6 +395,33 @@ const ExcalidrawWrapper = () => {
   // so a later re-share of this scene can still report where it came from.
   const remixedFromSourceIdRef = useRef<string | null>(null);
 
+  // Regenerating element versions and detaching from the source link is
+  // otherwise invisible to the user (the scene was already editable before
+  // the click), so a brief confirmation replaces the footer in the same
+  // spot, then fades out on its own. "visible" -> "fading" -> "hidden";
+  // App.tsx owns the timing, RemixFooter just renders whichever phase.
+  const [remixConfirmationPhase, setRemixConfirmationPhase] = useState<
+    "hidden" | "visible" | "fading"
+  >("hidden");
+
+  useEffect(() => {
+    if (remixConfirmationPhase === "visible") {
+      const timer = window.setTimeout(
+        () => setRemixConfirmationPhase("fading"),
+        4000,
+      );
+      return () => window.clearTimeout(timer);
+    }
+    if (remixConfirmationPhase === "fading") {
+      // matches RemixFooter's opacity transition duration
+      const timer = window.setTimeout(
+        () => setRemixConfirmationPhase("hidden"),
+        400,
+      );
+      return () => window.clearTimeout(timer);
+    }
+  }, [remixConfirmationPhase]);
+
   const handleRemix = useCallback(() => {
     if (!excalidrawAPI || !remixInfo.isRemixable) {
       return;
@@ -416,6 +443,7 @@ const ExcalidrawWrapper = () => {
     trackRemixEvent("remix_completed", { sourceId: remixInfo.sourceId });
     remixedFromSourceIdRef.current = remixInfo.sourceId;
     setRemixInfo({ isRemixable: false, sourceId: null, sourceKey: null });
+    setRemixConfirmationPhase("visible");
   }, [excalidrawAPI, remixInfo]);
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -1003,7 +1031,14 @@ const ExcalidrawWrapper = () => {
 
   return (
     <div
-      style={{ height: "100%" }}
+      style={{
+        height: "100%",
+        boxSizing: "border-box",
+        paddingBottom:
+          remixInfo.isRemixable || remixConfirmationPhase !== "hidden"
+            ? REMIX_FOOTER_HEIGHT
+            : 0,
+      }}
       className={clsx("excalidraw-app", {
         "is-collaborating": isCollaborating,
       })}
@@ -1166,6 +1201,12 @@ const ExcalidrawWrapper = () => {
         <AppSidebar />
 
         {remixInfo.isRemixable && <RemixFooter onRemix={handleRemix} />}
+        {remixConfirmationPhase !== "hidden" && (
+          <RemixFooter
+            confirmationMessage="This copy is yours to edit and share"
+            fading={remixConfirmationPhase === "fading"}
+          />
+        )}
 
         {errorMessage && (
           <ErrorDialog onClose={() => setErrorMessage("")}>
