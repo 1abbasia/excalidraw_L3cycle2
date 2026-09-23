@@ -15,11 +15,11 @@ This codebase has **two unrelated systems** that both involve a link with an id/
 
 | File | Role in this feature |
 | --- | --- |
-| `excalidraw-app/App.tsx` | Contains `initializeScene`, which detects the `#json=id,key` hash and loads the shared scene as the local scene on page load. The Remix footer/button UI is wired in here: `remixInfo` state, `handleRemix`, and the `reshared` tracking call in `onExportToBackend`. |
+| `excalidraw-app/App.tsx` | Contains `initializeScene`, which detects the `#json=id,key` hash and loads the shared scene as the local scene on page load. The Remix footer/button UI is wired in here: `remixInfo` state, `handleRemix`, `remixConfirmationPhase` (drives the post-remix confirmation message timing), and the `reshared` tracking call in `onExportToBackend`. The `<Excalidraw>` wrapper's `paddingBottom` reserves `REMIX_FOOTER_HEIGHT` px whenever the footer *or* the confirmation message is showing, so neither ever overlaps the canvas or Excalidraw's own bottom-left/right controls. |
 | `excalidraw-app/data/index.ts` | Contains `importFromBackend` (fetches + decrypts a shared scene by id/key) and `exportToBackend` (encrypts + POSTs a scene, producing a new id/key). Remix reuses `exportToBackend` when a remixed scene is re-shared. |
 | `excalidraw-app/data/remix.ts` | The locked Remix interface contract — see below. Fully implemented, including `trackRemixEvent` forwarding to analytics. |
 | `excalidraw-app/data/remix.test.ts` | Unit tests for `getRemixableSceneInfo`, `remixScene`, and `trackRemixEvent`'s analytics forwarding. |
-| `excalidraw-app/components/RemixFooter.tsx` | The footer UI component: "Made with Excalidraw" + Remix button. |
+| `excalidraw-app/components/RemixFooter.tsx` | The footer UI component: "Made with Excalidraw" + Remix button. Exports `REMIX_FOOTER_HEIGHT` (49px) as the single source of truth for the bar's rendered height, read by both this component's own layout and `App.tsx`'s reserved padding. Also renders the post-remix confirmation message (see below) in the same spot, as an alternate mode of the same component — never both at once. |
 | `excalidraw-app/vite.config.mts` | Local-dev-only Vite proxy (`/api/v2` → `https://json.excalidraw.com`), added as a workaround while `json-dev.excalidraw.com` is down. Paired with a gitignored `.env.development.local`. Not part of the feature logic itself. |
 | `packages/excalidraw/analytics.ts` | **Outside `excalidraw-app/`** — shared analytics used by the whole editor, not scoped to this feature. `trackRemixEvent` forwards here (`trackEvent("remix", ...)`) into the existing Simple Analytics (`sa_event`) pipeline, gated by `ALLOWED_CATEGORIES_TO_TRACK` (now includes `"remix"`) and `VITE_APP_ENABLE_TRACKING`. Only the allowlist entry was added; the pipeline itself pre-dates Remix. |
 | `excalidraw-app/collab/Collab.tsx` | Implements live collaboration: session state, `isCollaborating()`, joining/leaving rooms, reconciling remote edits. Unrelated to Remix; exposes the `isCollaborating()` check Remix needs to avoid misfiring during a collab session. |
@@ -50,6 +50,14 @@ One detail specifically worth not rediscovering the hard way: `initializeScene`'
 `remixScene` is implemented: it rebuilds every element via `newElementWith(el, {}, true)` to regenerate `version`/`versionNonce`/`updated` without mutating the source elements. Source id/key are never part of the element/appState data, so there's nothing to strip — the scene is detached simply by never referencing them again once passed to local storage.
 
 All four `RemixTrackingEvent` values are wired and fire in practice: `footer_viewed` and `remix_clicked`/`remix_completed` from `App.tsx`, and `reshared` when a remixed scene (tracked via a `remixedFromSourceIdRef` that survives `remixInfo` resetting) gets shared again through `onExportToBackend`. `trackRemixEvent` forwards every call to `trackEvent("remix", event, JSON.stringify(meta))` in `packages/excalidraw/analytics.ts`, in addition to its original `console.info` logging — so events reach Simple Analytics in production, gated by that file's own `VITE_APP_ENABLE_TRACKING` and `isDevEnv()` checks (silently no-op in local dev by existing design, not a bug).
+
+## Post-remix confirmation message
+
+Regenerating element versions and detaching from the source link has no visible effect on its own — the scene was already editable before the click — so a brief confirmation ("This copy is yours to edit and share") replaces the footer in the same spot right after a successful remix, then fades out on its own.
+
+- `RemixFooter.tsx` gained a `confirmationMessage`/`fading` mode on the *same* component (no new component/file): when `confirmationMessage` is set, it renders that text instead of "Made with Excalidraw" + the Remix button — that copy path is otherwise untouched. `fading` toggles the CSS `opacity` transition; if the browser reports `prefers-reduced-motion: reduce`, no `transition` is set at all, so the message still disappears on schedule but without animating.
+- `App.tsx` owns all the timing via `remixConfirmationPhase` (`"hidden" → "visible" → "fading" → "hidden"`, driven by a `useEffect` with two `setTimeout`s — 4000ms visible, then 400ms fade — both cleaned up on unmount). `RemixFooter` itself holds no timers; it just renders whichever phase it's told to.
+- Also added: a 1px `borderTop: var(--default-border-color, #f1f0ff)` on the footer bar — the same variable `LayerUI`/`DialogActionButton`/`Toast` already use for a themed 1px border — so the bar reads as a deliberate band in light mode instead of blending into a white canvas.
 
 ## Corrections
 
